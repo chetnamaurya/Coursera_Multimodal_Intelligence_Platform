@@ -1,0 +1,16 @@
+[theme]
+base = "light"
+primaryColor = "#0056D2"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F7F8"
+textColor = "#1F1F1F"
+# Streamlit 1.67 accepts "sans-serif" (hyphenated), not "sans serif".
+font = "sans-serif"
+
+[client]
+showSidebarNavigation = false
+toolbarMode = "minimal"
+
+[server]
+# Uploaded course videos can be large (value in MB)
+maxUploadSize = 500
