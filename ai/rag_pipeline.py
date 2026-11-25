@@ -26,6 +26,11 @@ load_dotenv(BASE_DIR / ".env")
 DATABASE_PATH = BASE_DIR / "vector_database"
 COLLECTION_NAME = "coursera_evidence"
 
+# Uploaded courses are indexed in a separate store that Git never touches
+# (same path as backend/upload_pipeline.py)
+UPLOAD_DATABASE_PATH = BASE_DIR / "data" / "upload_vector_store"
+UPLOAD_COLLECTION_PREFIX = "upload_"
+
 MODEL_NAME = os.getenv(
     "GEMINI_MODEL",
     "gemini-3.5-flash-lite"
@@ -51,9 +56,15 @@ GEMINI_RETRY_WAIT_SECONDS = 2
 @lru_cache(maxsize=8)
 def get_collection(collection_name=COLLECTION_NAME):   # Get collection from vector database OPEN VECTOR DATABASE
     # collection_name lets uploaded course materials use their own
-    # collection (upload_<id>); the default is the original index.
+    # collection (upload_<id>) in the upload store; the default is the
+    # original index.
+    if collection_name.startswith(UPLOAD_COLLECTION_PREFIX):
+        path = UPLOAD_DATABASE_PATH
+    else:
+        path = DATABASE_PATH
+
     client = chromadb.PersistentClient(
-        path=str(DATABASE_PATH)
+        path=str(path)
     )
     return client.get_collection(name=collection_name)
 

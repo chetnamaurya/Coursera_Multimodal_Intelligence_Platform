@@ -49,7 +49,10 @@ def collection_names():
 
 
 def original_count():
-    return up._chroma_client().get_collection(up.ORIGINAL_COLLECTION).count()
+    import chromadb
+
+    client = chromadb.PersistentClient(path=str(up.DATABASE_PATH))
+    return client.get_collection(up.ORIGINAL_COLLECTION).count()
 
 
 # ==================================================

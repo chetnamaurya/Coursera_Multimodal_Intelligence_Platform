@@ -5,3 +5,4 @@ __pycache__/
 data/reviews.db
 .streamlit/secrets.toml
 data/uploads/
+data/upload_vector_store/

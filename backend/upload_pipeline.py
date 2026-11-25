@@ -46,6 +46,11 @@ import pandas as pd
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOADS_DIR = BASE_DIR / "data" / "uploads"
 DATABASE_PATH = BASE_DIR / "vector_database"
+# Upload collections live in their own store, outside the Git-tracked
+# vector_database/. When a deploy re-syncs the repo it replaces the files
+# in vector_database/, and writes from an open connection then fail with
+# "attempt to write a readonly database". Same path as ai/rag_pipeline.py.
+UPLOAD_DATABASE_PATH = BASE_DIR / "data" / "upload_vector_store"
 
 ORIGINAL_COLLECTION = "coursera_evidence"
 COLLECTION_PREFIX = "upload_"
@@ -973,9 +978,31 @@ def _embedding_model():
 
 
 def _chroma_client():
+    """Client for the upload store (never the original vector_database/)."""
     import chromadb
 
-    return chromadb.PersistentClient(path=str(DATABASE_PATH))
+    UPLOAD_DATABASE_PATH.mkdir(parents=True, exist_ok=True)
+    return chromadb.PersistentClient(path=str(UPLOAD_DATABASE_PATH))
+
+
+def _stale_database(error):
+    """True when SQLite says the open database file was replaced or moved."""
+    text = str(error).lower()
+    return "readonly database" in text or "code: 1032" in text
+
+
+def _reset_chroma_clients():
+    """Forget cached Chroma connections so the next client reopens the files."""
+    from chromadb.api.client import SharedSystemClient
+
+    SharedSystemClient.clear_system_cache()
+
+    try:
+        from ai.rag_pipeline import get_collection
+
+        get_collection.cache_clear()
+    except ImportError:
+        pass
 
 
 def index_upload(upload_id, records, progress_cb=None, batch_size=256):
@@ -1000,26 +1027,38 @@ def index_upload(upload_id, records, progress_cb=None, batch_size=256):
     if not records:
         raise ValueError("There is no evidence to index.")
 
-    collection = _chroma_client().get_or_create_collection(
-        name=name, metadata={"hnsw:space": "cosine"}
-    )
     model = _embedding_model()
 
-    for start in range(0, len(records), batch_size):
-        batch = records[start:start + batch_size]
-        embeddings = model.encode(
-            [record["text"] for record in batch], normalize_embeddings=True
-        ).tolist()
-
-        collection.upsert(
-            ids=[record["id"] for record in batch],
-            documents=[record["text"] for record in batch],
-            embeddings=embeddings,
-            metadatas=[_clean_metadata(record["metadata"]) for record in batch],
+    def write_all():
+        collection = _chroma_client().get_or_create_collection(
+            name=name, metadata={"hnsw:space": "cosine"}
         )
 
-        _report(progress_cb, "index", (start + len(batch)) / len(records),
-                f"Indexed {start + len(batch)} of {len(records)} records")
+        for start in range(0, len(records), batch_size):
+            batch = records[start:start + batch_size]
+            embeddings = model.encode(
+                [record["text"] for record in batch], normalize_embeddings=True
+            ).tolist()
+
+            collection.upsert(
+                ids=[record["id"] for record in batch],
+                documents=[record["text"] for record in batch],
+                embeddings=embeddings,
+                metadatas=[_clean_metadata(record["metadata"]) for record in batch],
+            )
+
+            _report(progress_cb, "index", (start + len(batch)) / len(records),
+                    f"Indexed {start + len(batch)} of {len(records)} records")
+
+    try:
+        write_all()
+    except Exception as error:
+        if not _stale_database(error):
+            raise
+
+        # A cached connection points at a replaced file: reopen and retry once
+        _reset_chroma_clients()
+        write_all()
 
     return name
 

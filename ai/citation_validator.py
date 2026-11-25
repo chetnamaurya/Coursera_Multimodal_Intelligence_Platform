@@ -18,14 +18,36 @@ if str(BASE_DIR) not in sys.path:
 # 2. EXTRACT CITATIONS FROM GEMINI ANSWERS
 # ==================================================
 
+# One reference inside brackets: letters, then a number ("E1", "Rule 7",
+# "Evidence E3"). Groups may join several with , ; or - ("E1, E2", "E1-E3").
+REFERENCE = r"[A-Za-z][A-Za-z ]{0,20}?\d+"
+CITATION_LIKE = re.compile(
+    rf"{REFERENCE}(?:\s*[,;\-–]\s*{REFERENCE})*"
+)
+
+
+def strip_code(answer):
+
+    # Python code in an answer is not a citation: scores[key], nums[-1]
+    # or [x * 2 for x in range(5)]. Remove fenced and inline code first.
+    answer = re.sub(r"```.*?```", " ", answer, flags=re.DOTALL)
+    return re.sub(r"`[^`\n]*`", " ", answer)
+
+
 def extract_citation_groups(answer):
 
-    # Finds bracketed text such as:
+    # Finds bracketed text that looks like a citation:
     # [E1], [E2, E3], [Rule 7], [E99]
-    return re.findall(
+    # Code-like brackets such as [key] or [0, 2, 4] are skipped.
+    groups = re.findall(
         r"\[([^\[\]\n]{1,100})\]",
-        answer
+        strip_code(answer)
     )
+
+    return [
+        group for group in groups
+        if CITATION_LIKE.fullmatch(group.strip())
+    ]
 
 
 # ==================================================
@@ -211,7 +233,22 @@ def run_offline_test():
 
     assert "[Rule 7]" in bad_result["invalid_citations"]
 
+    code_answer = (
+        "Reading scores[key] for a missing key raises KeyError [E1]. "
+        "Students confuse `[x * 2 for x in range(5)]` with a loop [E2]. "
+        "nums[-1] gives the last item and [0, 2, 4] is a list [E3].\n"
+        "```python\nevens = [x for x in range(10) if x % 2 == 0]\n```"
+    )
+
+    code_result = validate_answer_citations(
+        code_answer,
+        sample_evidence
+    )
+
+    assert code_result["passed"], code_result["invalid_citations"]
+
     print("Valid citation test: PASS")
+    print("Python code ignored: PASS")
     print("Invalid citation detection: PASS")
     print("Rule citation detection: PASS")
 
