@@ -2,6 +2,7 @@
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from functools import lru_cache
 
@@ -27,10 +28,20 @@ COLLECTION_NAME = "coursera_evidence"
 
 MODEL_NAME = os.getenv(
     "GEMINI_MODEL",
-    "gemini-3.1-flash-lite"
+    "gemini-3.5-flash-lite"
 )
 
-BACKUP_MODEL = "gemini-3.1-flash-lite"
+# Tried in order after MODEL_NAME when a model is busy or retired.
+# They must be different models: one overloaded model has no backup.
+BACKUP_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+]
+BACKUP_MODEL = BACKUP_MODELS[0]
+
+# Temporary Gemini failures: rate limit, server error, overloaded, timeout
+GEMINI_RETRY_CODES = {429, 500, 503, 504}
+GEMINI_RETRY_WAIT_SECONDS = 2
 
 
 # ==================================================
@@ -457,7 +468,7 @@ def call_gemini(prompt):    # GEMINI API CALL FUNCTION
     models = list(
         dict.fromkeys([
             MODEL_NAME,
-            BACKUP_MODEL
+            *BACKUP_MODELS
         ])
     )
 
@@ -466,35 +477,49 @@ def call_gemini(prompt):    # GEMINI API CALL FUNCTION
     try:
         for model_name in models:
 
-            try:
-                response = client.models.generate_content(        
-                    model=model_name,
-                    contents=prompt                         # Our input prompt is sent to Gemini API for answer generation
-                )
+            # Each model gets one quick retry before moving to the next
+            for attempt in (1, 2):
 
-                if not response.text:
-                    raise RuntimeError(
-                        "Gemini returned an empty response."
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt                     # Our input prompt is sent to Gemini API for answer generation
                     )
 
-                return response.text
+                    if not response.text:
+                        raise RuntimeError(
+                            "Gemini returned an empty response."
+                        )
 
-            except Exception as error:
-                last_error = error
+                    return response.text
 
-                if getattr(error, "code", None) != 503:
-                    raise
+                except Exception as error:
+                    last_error = error
+                    code = getattr(error, "code", None)
 
-                print(
-                    f"{model_name} unavailable. "
-                    "Trying fallback if available."
-                )
+                    if code == 404:
+                        # Model retired or unknown: try the next one
+                        print(f"{model_name} not found. Trying the next model.")
+                        break
+
+                    if code not in GEMINI_RETRY_CODES:
+                        raise
+
+                    print(
+                        f"{model_name} unavailable ({code}), attempt {attempt}. "
+                        "Retrying or trying the next model."
+                    )
+
+                    if attempt == 1:
+                        time.sleep(GEMINI_RETRY_WAIT_SECONDS)
 
     finally:
         client.close()
 
+    # Keep "could not generate" in the text: the upload flow retries on it
     raise RuntimeError(
-        "Gemini could not generate the answer."
+        "Gemini could not generate the answer: every model is busy "
+        f"({', '.join(models)}). Please try again in a minute."
     ) from last_error
 
 
