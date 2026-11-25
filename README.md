@@ -1,7 +1,9 @@
 
 # Coursera Multimodal Intelligence Platform
 
-**🔗 Live demo:** https://courseramultimodalintelligenceplatform.streamlit.app/
+**Demo login:** username `demo` · password `YOUR-DEMO-PASSWORD`
+
+> Uses synthetic demonstration data. If the app has been idle, it may take about a minute to wake up. Demo reviews and uploads reset when the app restarts.
 
 > The live demo is login-protected. Contact me for demo access.
 
