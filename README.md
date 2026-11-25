@@ -1,11 +1,12 @@
 
 # Coursera Multimodal Intelligence Platform
 
-**Demo login:** username `demo` · password `YOUR-DEMO-PASSWORD`
+**🔗 Live demo:** https://courseramultimodalintelligenceplatform.streamlit.app/
+
+**Demo login:** username `demo` · password `courserademo2026`
 
 > Uses synthetic demonstration data. If the app has been idle, it may take about a minute to wake up. Demo reviews and uploads reset when the app restarts.
 
-> The live demo is login-protected. Contact me for demo access.
 
 An AI-powered educational analytics platform that helps educators
 identify student learning difficulties, investigate supporting
