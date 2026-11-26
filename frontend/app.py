@@ -58,6 +58,11 @@ comments = pd.read_csv(
     RAW_DIR / "student_comments.csv"
 )
 
+# Loaded up front: the Quick view dialog needs it even when no topic is selected
+video_topics = pd.read_csv(
+    RAW_DIR / "video_topics.csv"
+)
+
 
 @st.cache_data(show_spinner=False)
 def load_topic_frames(topic_id, video_id):
@@ -594,11 +599,6 @@ else:
 
     # 10. Connect learning difficulties to video lessons
     ui.render(ui.section_title("Related Video Evidence"))
-
-    # Load video topic information
-    video_topics = pd.read_csv(
-        RAW_DIR / "video_topics.csv"
-    )
 
     # Find selected topic's video metadata
     matching_video = video_topics[
